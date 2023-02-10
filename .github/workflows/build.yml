@@ -1,0 +1,72 @@
+name: build
+
+on: [ push, pull_request ]
+
+jobs:
+  build-ubuntu-latest:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y libcrypto++-dev libreadline-dev libx11-dev libpng-dev
+
+    - name: Build
+      run: make
+
+  build-ubuntu-22.04:
+    runs-on: ubuntu-22.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y libcrypto++-dev libreadline-dev libx11-dev libpng-dev
+
+    - name: Build
+      run: make
+
+  build-ubuntu-20.04:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y libcrypto++-dev libreadline-dev libx11-dev libpng-dev
+
+    - name: Build
+      run: make
+
+  build-ubuntu-18.04:
+    runs-on: ubuntu-18.04
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y libcrypto++-dev libreadline-dev libx11-dev libpng-dev
+
+    - name: Build
+      run: make
