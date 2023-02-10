@@ -34,7 +34,7 @@ DEPFLAGS = -MM
 SOURCES = $(filter-out src/main.cpp, $(wildcard src/*.cpp))
 OBJ_FILES = $(SOURCES:src/%.cpp=$(BUILD_DIR)/%.o)
 
-.PHONY : all libspl libclip test install uninstall clean clean-dep
+.PHONY : all test test-build-only pwdman libspl install uninstall clean clean-dep
 
 all : pwdman
 
@@ -51,20 +51,12 @@ libspl : | $(LIB_DIR)
 	@$(MAKE) -C libspl --no-print-directory nodep="$(nodep)"
 	@ln -f libspl/lib/$(shell uname -s)-$(shell uname -m)/libspl.a $(LIB_DIR)/libspl.a
 
-$(LIB_DIR)/libclip.a : | $(LIB_DIR) $(BUILD_DIR)
-	@echo "CMAKE     $(MODULE)/$(BUILD_DIR)/libclip"
-	@cmake -S libclip -B $(BUILD_DIR)/libclip > /dev/null
-	@echo "MAKE      $(MODULE)/$(BUILD_DIR)/libclip"
-	@$(MAKE) --silent -C $(BUILD_DIR)/libclip --no-print-directory nodep="$(nodep)" > /dev/null
-	@echo "MV        $(MODULE)/$(BUILD_DIR)/libclip.a"
-	@mv $(BUILD_DIR)/libclip/libclip.a $(LIB_DIR)/libclip.a
-
-install : pwdman
-	@echo "CP        $(MODULE)"
+install : $(BIN_DIR)/pwdman
+	@echo "CP        $(BIN_DIR)/pwdman"
 	@cp $(BIN_DIR)/pwdman /usr/bin/pwdman
 
 uninstall :
-	@echo "RM        $(MODULE)"
+	@echo "RM        /usr/bin/pwdman"
 	@rm -f /usr/bin/pwdman
 
 ifndef nodep
@@ -101,6 +93,14 @@ clean-dep :
 
 libspl/lib/$(shell uname -s)-$(shell uname -m)/libspl.a : libspl
 
+$(LIB_DIR)/libclip.a : | $(LIB_DIR) $(BUILD_DIR)
+	@echo "CMAKE     $(MODULE)/$(BUILD_DIR)/libclip"
+	@cmake -S libclip -B $(BUILD_DIR)/libclip > /dev/null
+	@echo "MAKE      $(MODULE)/$(BUILD_DIR)/libclip"
+	@$(MAKE) --silent -C $(BUILD_DIR)/libclip --no-print-directory nodep="$(nodep)" > /dev/null
+	@echo "MV        $(MODULE)/$(BUILD_DIR)/libclip.a"
+	@mv $(BUILD_DIR)/libclip/libclip.a $(LIB_DIR)/libclip.a
+
 $(BIN_DIR)/pwdman : $(BUILD_DIR)/main.o $(LIB_DEPEND) $(OBJ_FILES) | $(BIN_DIR)
 	@echo "LD        $(MODULE)/$@"
 	@$(CXX) $(CXXFLAGS) $(EXTRACXXFLAGS) $(OBJ_FILES) $(BUILD_DIR)/main.o $(LIB_DIRS) $(LIBS) -o $@
@@ -112,6 +112,6 @@ $(BIN_DIR)/pwdman : $(BUILD_DIR)/main.o $(LIB_DEPEND) $(OBJ_FILES) | $(BIN_DIR)
 	sed 's,\($*\)\.o[ :]*,$(BUILD_DIR)/\1.o $@ : ,g' < $@.$$$$ > $@; \
 	rm -f $@.$$$$
 
-$(BUILD_DIR)/%.o : src/%.cpp $(LIB_DEPEND) | $(BUILD_DIR)
+$(BUILD_DIR)/%.o : src/%.cpp | $(BUILD_DIR)
 	@echo "CXX       $(MODULE)/$@"
-	@$(CXX) -c $(CPPFLAGS) $(CXXFLAGS) $(EXTRACXXFLAGS) $(INCLUDES) $< $(LD_FLAGS) $(LIB_DIRS) $(LIBS) -o $@
+	@$(CXX) -c $(CPPFLAGS) $(CXXFLAGS) $(EXTRACXXFLAGS) $(INCLUDES) $< -o $@
