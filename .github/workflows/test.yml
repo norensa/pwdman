@@ -1,0 +1,34 @@
+name: test
+
+on: [ push, pull_request ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+
+    - name: Checkout submodules
+      uses: textbook/git-checkout-submodule-action@master
+      with:
+        remote: true
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -ylibcrypto++-dev libreadline-dev libx11-dev libpng-dev
+
+    - name: Build
+      run: make test-build-only
+
+    - name: Run tests
+      run: |
+        export LD_LIBRARY_PATH=$(realpath lib/*)
+        ./test/dtest/dtest-cxx17 test/build
+
+    - name: Dump results
+      if: ${{ always() }}
+      run: cat dtest.log.json
