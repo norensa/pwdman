@@ -12,6 +12,7 @@
 #include <sys/types.h>
 #include <readline/readline.h>
 #include <readline/history.h>
+#include <clip.h>
 
 #define PASS_MAX 1024
 #define CMD_MAX 1024
@@ -119,9 +120,10 @@ void print_cmd_help(const char *err = nullptr) {
         "\n"
         "Usage:\n"
         "    (a)dd       <name> <password> : add/overwrite a stored password\n"
-        "    (r)emove    <name>            : remove a stored password\n"
-        "    (g)et       <name>            : get a stored passwords\n"
+        "    (c)opy      <name>            : copy a stored password to clipboard\n"
+        "    (g)et       <name>            : get a stored password\n"
         "    (l)ist                        : list all stored passwords\n"
+        "    (r)emove    <name>            : remove a stored password\n"
         "    (s)ave                        : save changes\n"
         "    (h)elp                        : show this help\n"
         "    (q)uit|exit                   : terminate\n"
@@ -227,6 +229,32 @@ void command_line() {
 
             try {
                 printf("%s: %s\n", n, store->get(n).c_str());
+            }
+            catch (const ElementNotFoundError &e) {
+                printf("'%s' not found\n", n);
+            }
+        }
+        else if (strcasecmp(p, "c") == 0 || strcasecmp(p, "copy") == 0) {
+            n = strtok(nullptr, " ");
+
+            if (n == nullptr) {
+                printf("Name argument missing for command 'copy'\n");
+                continue;
+            }
+            if (strtok(nullptr, " ") != nullptr) {
+                printf("Unexpected arguments given to command 'copy'\n");
+                continue;
+            }
+
+            add_history(cmd);
+
+            try {
+                if (clip::set_text(store->get(n))) {
+                    printf("Password '%s' copied to clipboard\n", n);
+                }
+                else {
+                    printf("An error occurred while copying data to clipboard\n");
+                }
             }
             catch (const ElementNotFoundError &e) {
                 printf("'%s' not found\n", n);

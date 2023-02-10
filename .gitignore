@@ -64,3 +64,6 @@ bin/
 
 # documentation
 /doc/
+
+# build directory
+/build/

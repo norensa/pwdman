@@ -1,7 +1,7 @@
-# 
+#
 #  Copyright (c) 2023 Noah Orensa.
 #  Licensed under the MIT license. See LICENSE file in the project root for details.
-# 
+#
 
 # module name
 MODULE = pwdman
@@ -12,17 +12,18 @@ BUILD_DIR = build/$(shell uname -s)-$(shell uname -m)
 LIB_DIR = lib/$(shell uname -s)-$(shell uname -m)
 BIN_DIR = bin/$(shell uname -s)-$(shell uname -m)
 
-INCLUDES = -Iinclude -Ilibspl/include
+INCLUDES = -Iinclude -Ilibspl/include -Ilibclip
 
-LIB_DIRS = -Llib/$(shell uname -s)-$(shell uname -m)
+LIB_DIRS = -L$(LIB_DIR)
 
-LIBS = -lspl -lcryptopp -lreadline
+LIBS = -lspl -lclip -lxcb -lpng -lcryptopp -lreadline
 LIB_DEPEND = \
-	libspl/lib/$(shell uname -s)-$(shell uname -m)/libspl.a
+	libspl/lib/$(shell uname -s)-$(shell uname -m)/libspl.a \
+	$(LIB_DIR)/libclip.a \
 
 CXX = g++
 CPPFLAGS = -Werror -Wall -Winline -Wpedantic
-CXXFLAGS = -std=c++17 -march=native -fopenmp -pthread -fPIC
+CXXFLAGS = -std=c++17 -march=native -fPIC
 
 AR = ar
 ARFLAGS = rc
@@ -33,7 +34,7 @@ DEPFLAGS = -MM
 SOURCES = $(filter-out src/main.cpp, $(wildcard src/*.cpp))
 OBJ_FILES = $(SOURCES:src/%.cpp=$(BUILD_DIR)/%.o)
 
-.PHONY : all libspl test install uninstall clean clean-dep
+.PHONY : all libspl libclip test install uninstall clean clean-dep
 
 all : pwdman
 
@@ -49,6 +50,14 @@ pwdman : $(BIN_DIR)/pwdman
 libspl : | $(LIB_DIR)
 	@$(MAKE) -C libspl --no-print-directory nodep="$(nodep)"
 	@ln -f libspl/lib/$(shell uname -s)-$(shell uname -m)/libspl.a $(LIB_DIR)/libspl.a
+
+$(LIB_DIR)/libclip.a : | $(LIB_DIR) $(BUILD_DIR)
+	@echo "CMAKE     $(MODULE)/$(BUILD_DIR)/libclip"
+	@cmake -S libclip -B $(BUILD_DIR)/libclip > /dev/null
+	@echo "MAKE      $(MODULE)/$(BUILD_DIR)/libclip"
+	@$(MAKE) --silent -C $(BUILD_DIR)/libclip --no-print-directory nodep="$(nodep)" > /dev/null
+	@echo "MV        $(MODULE)/$(BUILD_DIR)/libclip.a"
+	@mv $(BUILD_DIR)/libclip/libclip.a $(LIB_DIR)/libclip.a
 
 install : pwdman
 	@echo "CP        $(MODULE)"
@@ -69,9 +78,10 @@ endif
 # cleanup
 
 clean :
-	@rm -rf build lib
+	@rm -rf build lib bin
 	@echo "Cleaned $(MODULE)/build/"
 	@echo "Cleaned $(MODULE)/lib/"
+	@echo "Cleaned $(MODULE)/bin/"
 	@$(MAKE) -C test --no-print-directory clean nodep="$(nodep)"
 	@$(MAKE) -C libspl --no-print-directory clean nodep="$(nodep)"
 
