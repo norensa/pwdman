@@ -1,0 +1,3 @@
+[submodule "libspl"]
+	path = libspl
+	url = git@github.com:noahorensa/libspl.git
