@@ -64,7 +64,7 @@ void PasswordStore::readObject(InputStreamSerializer &serializer) {
             )
         );
     }
-    catch (const CryptoPP::KeyBadErr &e) {
+    catch (const CryptoPP::DataDecryptorErr &e) {
         throw Error("Invalid password");
     }
     catch (...) {
