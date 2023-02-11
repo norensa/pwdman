@@ -12,11 +12,33 @@
 #include <error.h>
 #include <algorithm>
 
+using DataParameters = CryptoPP::DataParametersInfo<
+    CryptoPP::AES::BLOCKSIZE,
+    CryptoPP::AES::DEFAULT_KEYLENGTH,
+    CryptoPP::SHA256::DIGESTSIZE,
+    8,
+    2500
+>;
+
+using Encryptor = CryptoPP::DataEncryptorWithMAC<
+    CryptoPP::AES,
+    CryptoPP::SHA256,
+    CryptoPP::HMAC<CryptoPP::SHA256>,
+    DataParameters
+>;
+
+using Decryptor = CryptoPP::DataDecryptorWithMAC<
+    CryptoPP::AES,
+    CryptoPP::SHA256,
+    CryptoPP::HMAC<CryptoPP::SHA256>,
+    DataParameters
+>;
+
 void PasswordStore::writeObject(OutputStreamSerializer &serializer) const {
     std::string encrypted;
 
     CryptoPP::StringSource ss1(JSON::encode(_passwords), true,
-        new CryptoPP::DefaultEncryptorWithMAC(
+        new Encryptor(
             _passphrase.c_str(),
             new CryptoPP::HexEncoder(
                 new CryptoPP::StringSink(encrypted)
@@ -35,7 +57,7 @@ void PasswordStore::readObject(InputStreamSerializer &serializer) {
     try {
         CryptoPP::StringSource ss2(encrypted, true,
             new CryptoPP::HexDecoder(
-                new CryptoPP::DefaultDecryptorWithMAC(
+                new Decryptor(
                     _passphrase.c_str(),
                     new CryptoPP::StringSink(decrypted)
                 )
