@@ -4,9 +4,9 @@
 */
 
 #include <password_store.h>
-#include <cryptopp/default.h>
-#include <cryptopp/filters.h>
-#include <cryptopp/hex.h>
+#include <libcryptopp/default.h>
+#include <libcryptopp/filters.h>
+#include <libcryptopp/hex.h>
 #include <std_serialization.h>
 #include <json.h>
 #include <error.h>

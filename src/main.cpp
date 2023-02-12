@@ -12,7 +12,7 @@
 #include <sys/types.h>
 #include <readline/readline.h>
 #include <readline/history.h>
-#include <clip.h>
+#include <libclip/clip.h>
 
 #define PASS_MAX 1024
 #define CMD_MAX 1024

@@ -20,6 +20,7 @@ LIBS = -lspl -lcryptopp
 
 LIB_DEPEND = \
 	../lib/$(shell uname -s)-$(shell uname -m)/libspl.a \
+	../lib/$(shell uname -s)-$(shell uname -m)/libcryptopp.a \
 
 EXTRA_OBJ = $(filter-out ../build/$(shell uname -s)-$(shell uname -m)/main.o, $(wildcard ../build/$(shell uname -s)-$(shell uname -m)/*.o))
 
