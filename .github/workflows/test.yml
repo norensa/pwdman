@@ -23,7 +23,7 @@ jobs:
     - name: Run tests
       run: |
         export LD_LIBRARY_PATH=$(realpath lib/*)
-        ./test/dtest/dtest-cxx17 test/build
+        ./test/dtest/dtest-cxx11 test/build
 
     - name: Dump results
       if: ${{ always() }}
