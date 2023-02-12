@@ -16,7 +16,7 @@ INCLUDES = -Iinclude -Ilibspl/include -I.
 
 LIB_DIRS = -L$(LIB_DIR)
 
-LIBS = -lspl -lclip -lxcb -lpng -lcryptopp -lreadline
+LIBS = -lspl -ldl -lclip -lxcb -lpng -lcryptopp -lreadline
 LIB_DEPEND = \
 	libspl/lib/$(shell uname -s)-$(shell uname -m)/libspl.a \
 	$(LIB_DIR)/libclip.a \
@@ -24,7 +24,7 @@ LIB_DEPEND = \
 
 CXX = g++
 CPPFLAGS = -Werror -Wall -Winline -Wpedantic
-CXXFLAGS = -std=c++17 -march=native -fPIC
+CXXFLAGS = -std=c++11 -march=native -fPIC -pthread
 
 AR = ar
 ARFLAGS = rc
@@ -41,7 +41,7 @@ all : pwdman
 
 test : libspl libcryptopp $(OBJ_FILES)
 	@$(MAKE) -C test --no-print-directory EXTRACXXFLAGS="$(EXTRACXXFLAGS)" nodep="$(nodep)"
-	@./test/dtest/dtest-cxx17
+	@./test/dtest/dtest-cxx11
 
 test-build-only : libspl libcryptopp $(OBJ_FILES)
 	@$(MAKE) -C test --no-print-directory EXTRACXXFLAGS="$(EXTRACXXFLAGS)" nodep="$(nodep)"

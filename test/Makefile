@@ -7,7 +7,7 @@
 MODULE = pwdman
 
 # dtest executable to build
-DTEST = dtest-cxx17
+DTEST = dtest-cxx11
 
 # add any include directories
 INCLUDES = -I../include -I../libspl/include
@@ -26,7 +26,7 @@ EXTRA_OBJ = $(filter-out ../build/$(shell uname -s)-$(shell uname -m)/main.o, $(
 
 CXX = g++
 CPPFLAGS = -Werror -Wall -Winline -Wpedantic
-CXXFLAGS = -std=c++17 -march=native -fPIC
+CXXFLAGS = -std=c++11 -march=native -fPIC -pthread
 
 ################################################################################
 
