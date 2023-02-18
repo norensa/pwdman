@@ -4,48 +4,16 @@
 */
 
 #include <password_store.h>
+#include <command_line.h>
 #include <file.h>
-#include <unistd.h>
-#include <termios.h>
 #include <stdio.h>
 #include <pwd.h>
-#include <sys/types.h>
 #include <readline/readline.h>
 #include <readline/history.h>
 #include <libclip/clip.h>
 
-#define PASS_MAX 1024
-#define CMD_MAX 1024
-
 PasswordStore *store = nullptr;
 File *passFile = nullptr;
-std::vector<std::string> storedPasswordNames;
-
-void getPassword(char *password) {
-    static struct termios oldt, newt;
-    int i = 0;
-    int c;
-
-    /*saving the old settings of STDIN_FILENO and copy settings for resetting*/
-    tcgetattr(STDIN_FILENO, &oldt);
-    newt = oldt;
-
-    /*setting the approriate bit in the termios struct*/
-    newt.c_lflag &= ~(ECHO);
-
-    /*setting the new bits*/
-    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
-
-    /*reading the password from the console*/
-    while ((c = getchar())!= '\n' && c != EOF && i < PASS_MAX) {
-        password[i++] = c;
-    }
-    password[i] = '\0';
-    printf("\n");
-
-    /*resetting our old STDIN_FILENO*/
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
-}
 
 bool initialize_password_store() {
 
@@ -63,7 +31,7 @@ bool initialize_password_store() {
 
         char password[PASS_MAX + 1];
         printf("\nPassword: ");
-        getPassword(password);
+        get_password(password);
 
         store = new PasswordStore(password);
 
@@ -75,7 +43,6 @@ bool initialize_password_store() {
             return false;
         }
 
-        storedPasswordNames = store->list();
         return true;
     }
     else {
@@ -87,16 +54,16 @@ bool initialize_password_store() {
         char password[PASS_MAX + 1], confirm[PASS_MAX + 1];
 
         printf("\nPassword: ");
-        getPassword(password);
+        get_password(password);
         printf("Confirm : ");
-        getPassword(confirm);
+        get_password(confirm);
 
         while (strcmp(password, confirm)) {
             printf("Password mismatch. Try again\n");
             printf("\nPassword: ");
-            getPassword(password);
+            get_password(password);
             printf("Confirm : ");
-            getPassword(confirm);
+            get_password(confirm);
         }
 
         store = new PasswordStore(password);
@@ -124,178 +91,233 @@ void print_cmd_help(const char *err = nullptr) {
         "    (g)et       <name>            : get a stored password\n"
         "    (l)ist                        : list all stored passwords\n"
         "    (r)emove    <name>            : remove a stored password\n"
-        "    (s)ave                        : save changes\n"
+        "    (w)rite                       : write changes to password file\n"
         "    (h)elp                        : show this help\n"
         "    (q)uit|exit                   : terminate\n"
         "\n"
     );
 }
 
-char * comp_generator(const char *text, int state) {
-    static size_t i, len;
+char * completion_generator(const char *text, int state) {
+    static size_t i;
+    static std::vector<std::string> suggestions;
 
-    if (!state) {
-        i = 0;
-        len = strlen(text);
+    size_t len;
+
+    if (state) {
+        ++i;
     }
     else {
-        ++i;
+        i = 0;
+        len = strlen(text);
+        suggestions.clear();
     }
 
     if (len < 2) return nullptr;
 
-    for (; i < storedPasswordNames.size(); ++i) {
-        auto s = storedPasswordNames[i].c_str();
-        if (strncmp(s, text, len) == 0) {
-            return strdup(s);
+    if (i == 0) {
+        if (strrchr(text, '.')) {
+            auto n = std::string(text);
+            n = n.substr(0, n.rfind("."));
+            auto n_unescaped = unescape(n);
+            if (store->passwords().contains(n_unescaped)) {
+                for (const auto &x: store->passwords()[n_unescaped]) {
+                    auto s = n + '.' + x.k;
+                    if (! rl_completion_quote_character) s = escape(s);
+                    if (strncmp(s.c_str(), text, len) == 0) suggestions.push_back(s);
+                }
+            }
+        }
+        else {
+            for (auto s : store->list()) {
+                if (! rl_completion_quote_character) s = escape(s);
+                if (strncmp(s.c_str(), text, len) == 0) suggestions.push_back(s);
+            }
         }
     }
 
-    return nullptr;
+    return (i < suggestions.size()) ? strdup(suggestions[i].c_str()) : nullptr;
 }
 
-char ** comp_func(const char *text, int start, int end) {
+char ** completion_func(const char *text, int start, int end) {
     rl_attempted_completion_over = 1;
-    return rl_completion_matches(text, comp_generator);
+    return rl_completion_matches(text, completion_generator);
+}
+
+int quote_detector(char *line, int index) {
+    return (
+        index > 0 &&
+        line[index - 1] == '\\' &&
+        !quote_detector(line, index - 1)
+    );
 }
 
 void command_line() {
-    rl_attempted_completion_function = comp_func;
+    rl_attempted_completion_function = completion_func;
+    rl_completer_quote_characters = "\"'";
+    rl_completer_word_break_characters = strdup(" ");
+    rl_char_is_quoted_p = quote_detector;
 
-    char *cmd = nullptr, *tokenizedCmd = nullptr, *p, *n, *k;
+    char *str;
 
     while (true) {
-        if (cmd) free(cmd);
-        if (tokenizedCmd) free(tokenizedCmd);
-        cmd = readline("\n>> ");
+        str = readline("\n>> ");
+        Command cmd = parse_command(str);
+        free(str);
 
-        tokenizedCmd = strdup(cmd);
-        p = strtok(tokenizedCmd, " ");
-        if (strcasecmp(p, "a") == 0 || strcasecmp(p, "add") == 0) {
-            n = strtok(nullptr, " ");
-            k = strtok(nullptr, " ");
+        switch (cmd.type) {
+        case CommandType::ADD:
+            if (cmd.path.element.empty()) cmd.path.element = "default";
+            store->passwords()[cmd.path.name][cmd.path.element] = cmd.value;
+        break;
 
-            if (n == nullptr) {
-                printf("Name argument missing for command 'add'\n");
-                continue;
-            }
-            if (k == nullptr) {
-                printf("Password argument missing for command 'add'\n");
-                continue;
-            }
-            if (strtok(nullptr, " ") != nullptr) {
-                printf("Unexpected arguments given to command 'add'\n");
-                continue;
-            }
+        case CommandType::REMOVE:
+            add_history(cmd.cmdStr.c_str());
 
-            store->put(n, k);
-            storedPasswordNames = store->list();
-        }
-        else if (strcasecmp(p, "r") == 0 || strcasecmp(p, "remove") == 0) {
-            n = strtok(nullptr, " ");
+            if (store->passwords().contains(cmd.path.name)) {
+                if (cmd.path.element.empty()) {
+                    store->passwords().erase(cmd.path.name);
 
-            if (n == nullptr) {
-                printf("Name argument missing for command 'remove'\n");
-                continue;
-            }
-            if (strtok(nullptr, " ") != nullptr) {
-                printf("Unexpected arguments given to command 'remove'\n");
-                continue;
-            }
+                    printf("'%s' removed\n", cmd.path.name.c_str());
+                }
+                else if (store->passwords()[cmd.path.name].erase(cmd.path.element)) {
+                    if (store->passwords()[cmd.path.name].empty()) {
+                        store->passwords().erase(cmd.path.name);
+                        printf("'%s' removed\n", cmd.path.name.c_str());
+                    }
+                    else {
+                        printf("'%s.%s' removed\n", cmd.path.name.c_str(), cmd.path.element.c_str());
+                    }
 
-            add_history(cmd);
-
-            if (store->remove(n)) {
-                printf("'%s' removed\n", n);
-                storedPasswordNames = store->list();
+                }
+                else {
+                    printf("'%s.%s' not found\n", cmd.path.name.c_str(), cmd.path.element.c_str());
+                }
             }
             else {
-                printf("'%s' not found\n", n);
+                printf("'%s' not found\n", cmd.path.name.c_str());
             }
-        }
-        else if (strcasecmp(p, "g") == 0 || strcasecmp(p, "get") == 0) {
-            n = strtok(nullptr, " ");
+        break;
 
-            if (n == nullptr) {
-                printf("Name argument missing for command 'get'\n");
-                continue;
-            }
-            if (strtok(nullptr, " ") != nullptr) {
-                printf("Unexpected arguments given to command 'get'\n");
-                continue;
-            }
+        case CommandType::GET:
+            add_history(cmd.cmdStr.c_str());
 
-            add_history(cmd);
-
-            try {
-                printf("%s: %s\n", n, store->get(n).c_str());
+            if (store->passwords().contains(cmd.path.name)) {
+                if (cmd.path.element.empty()) {
+                    printf("%s: {\n", cmd.path.name.c_str());
+                    if (store->passwords()[cmd.path.name].contains("default")) {
+                        printf(
+                            "    default: %s\n",
+                            store->passwords()[cmd.path.name]["default"].c_str()
+                        );
+                    }
+                    for (const auto &x : store->passwords()[cmd.path.name]) {
+                        if (x.k != "default") {
+                            printf("    %s: %s\n", x.k.c_str(), x.v.c_str());
+                        }
+                    }
+                    printf("}\n");
+                }
+                else if (store->passwords()[cmd.path.name].contains(cmd.path.element)) {
+                    printf(
+                        "%s.%s: %s\n",
+                        cmd.path.name.c_str(), cmd.path.element.c_str(),
+                        store->passwords()[cmd.path.name][cmd.path.element].c_str()
+                    );
+                }
+                else {
+                    printf("'%s.%s' not found\n", cmd.path.name.c_str(), cmd.path.element.c_str());
+                }
             }
-            catch (const ElementNotFoundError &e) {
-                printf("'%s' not found\n", n);
+            else {
+                printf("'%s' not found\n", cmd.path.name.c_str());
             }
-        }
-        else if (strcasecmp(p, "c") == 0 || strcasecmp(p, "copy") == 0) {
-            n = strtok(nullptr, " ");
+        break;
 
-            if (n == nullptr) {
-                printf("Name argument missing for command 'copy'\n");
-                continue;
-            }
-            if (strtok(nullptr, " ") != nullptr) {
-                printf("Unexpected arguments given to command 'copy'\n");
-                continue;
-            }
+        case CommandType::COPY:
+            add_history(cmd.cmdStr.c_str());
 
-            add_history(cmd);
+            if (cmd.path.element.empty()) cmd.path.element = "default";
 
-            try {
-                if (clip::set_text(store->get(n))) {
-                    printf("Password '%s' copied to clipboard\n", n);
+            if (
+                store->passwords().contains(cmd.path.name)
+                && store->passwords()[cmd.path.name].contains(cmd.path.element)
+            ) {
+                if (clip::set_text(store->passwords()[cmd.path.name][cmd.path.element])) {
+                    printf("Password '%s.%s' copied to clipboard\n", cmd.path.name.c_str(), cmd.path.element.c_str());
                 }
                 else {
                     printf("An error occurred while copying data to clipboard\n");
                 }
             }
-            catch (const ElementNotFoundError &e) {
-                printf("'%s' not found\n", n);
-            }
-        }
-        else if (strcasecmp(p, "l") == 0 || strcasecmp(p, "list") == 0) {
-            if (strtok(nullptr, " ") != nullptr) {
-                printf("Unexpected arguments given to command 'list'\n");
-                continue;
-            }
-
-            add_history(cmd);
-
-            if (storedPasswordNames.empty()) {
-                printf("<Empty>\n");
-            }
             else {
-                for (const auto &n : storedPasswordNames) {
-                    printf("%s\n", n.c_str());
+                printf("'%s.%s' not found\n", cmd.path.name.c_str(), cmd.path.element.c_str());
+            }
+        break;
+
+        case CommandType::LIST:
+            add_history(cmd.cmdStr.c_str());
+
+            if (cmd.path.name.empty()) {
+                auto l = store->list();
+
+                if (l.empty()) {
+                    printf("<Empty>\n");
+                }
+                else {
+                    for (const auto &n : l) {
+                        printf("%s\n", n.c_str());
+                    }
                 }
             }
-        }
-        else if (strcasecmp(p, "s") == 0 || strcasecmp(p, "save") == 0) {
-            save_password_store();
-            add_history(cmd);
-        }
-        else if (strcasecmp(p, "h") == 0 || strcasecmp(p, "help") == 0) {
+            else {
+                if (
+                    store->passwords().contains(cmd.path.name)
+                    && (cmd.path.element.empty() || store->passwords()[cmd.path.name].contains(cmd.path.element))
+                ) {
+                    if (cmd.path.element.empty()) {
+                        if (store->passwords()[cmd.path.name].contains("default")) {
+                            printf("default\n");
+                        }
+                        for (const auto &x : store->passwords()[cmd.path.name]) {
+                            if (x.k != "default") printf("%s\n", x.k.c_str());
+                        }
+                    }
+                    else {
+                        printf("%s.%s\n", cmd.path.name.c_str(), cmd.path.element.c_str());
+                    }
+                }
+            }
+        break;
+
+        case CommandType::HELP:
+            add_history(cmd.cmdStr.c_str());
+
             print_cmd_help();
-            add_history(cmd);
-        }
-        else if (strcasecmp(p, "q") == 0 || strcasecmp(p, "quit") == 0 || strcasecmp(p, "exit") == 0) {
+        break;
+
+        case CommandType::WRITE:
+            add_history(cmd.cmdStr.c_str());
+
+            save_password_store();
+        break;
+
+        case CommandType::QUIT:
             printf("Bye!\n\n");
+        break;
+
+        case CommandType::WRITE_QUIT:
+            save_password_store();
+            printf("Bye!\n\n");
+        break;
+
+        default: break;
+        }
+
+        if (cmd.type == CommandType::QUIT || cmd.type == CommandType::WRITE_QUIT) {
             break;
         }
-        else {
-            printf("Unknown command '%s'\n", p);
-        }
     }
-
-    if (cmd) free(cmd);
-    if (tokenizedCmd) free(tokenizedCmd);
 }
 
 int main(int argc, char **argv) {

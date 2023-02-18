@@ -18,7 +18,7 @@ class PasswordStore
 protected:
 
     std::string _passphrase;
-    HashMap<std::string, std::string> _passwords;
+    HashMap<std::string, HashMap<std::string, std::string>> _passwords;
 
 public:
 
@@ -30,17 +30,12 @@ public:
 
     void readObject(InputStreamSerializer &serializer) override;
 
-    PasswordStore & put(const std::string &name, const std::string &key) {
-        _passwords.put(name, key);
-        return *this;
+    HashMap<std::string, HashMap<std::string, std::string>> & passwords() {
+        return _passwords;
     }
 
-    bool remove(const std::string &name) {
-        return _passwords.erase(name);
-    }
-
-    const std::string & get(const std::string &name) const {
-        return _passwords[name];
+    const HashMap<std::string, HashMap<std::string, std::string>> & passwords() const {
+        return _passwords;
     }
 
     std::vector<std::string> list() const;

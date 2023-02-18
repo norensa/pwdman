@@ -11,6 +11,7 @@
 #include <json.h>
 #include <error.h>
 #include <algorithm>
+#include <functional>
 
 using DataParameters = CryptoPP::DataParametersInfo<
     CryptoPP::AES::BLOCKSIZE,
@@ -34,6 +35,71 @@ using Decryptor = CryptoPP::DataDecryptorWithMAC<
     DataParameters
 >;
 
+static const uint64_t MAGIC = 0x5555555555551234;
+
+static const uint32_t VERSION = 1;
+
+static const std::function<HashMap<std::string, HashMap<std::string, std::string>>(InputStreamSerializer &, const char *)> reader[] = {
+    // 0
+    [] (InputStreamSerializer &serializer, const char *passphrase) -> HashMap<std::string, HashMap<std::string, std::string>> {
+        std::string encrypted, decrypted;
+
+        serializer >> encrypted;
+
+        try {
+            CryptoPP::StringSource ss2(encrypted, true,
+                new CryptoPP::HexDecoder(
+                    new Decryptor(
+                        passphrase,
+                        new CryptoPP::StringSink(decrypted)
+                    )
+                )
+            );
+        }
+        catch (const CryptoPP::DataDecryptorErr &e) {
+            throw Error("Invalid password");
+        }
+        catch (...) {
+            throw RuntimeError("Unexpected exception occurred");
+        }
+
+        auto m = JSON::decode<HashMap<std::string, std::string>>(decrypted);
+
+        return m.map<HashMap<std::string, HashMap<std::string, std::string>>>([] (const MapNode<std::string, std::string> &n) {
+            return MapNode<std::string, HashMap<std::string, std::string>>(
+                n.k,
+                HashMap<std::string, std::string>({ {"default", n.v} })
+            );
+        });
+    },
+
+    // 1
+    [] (InputStreamSerializer &serializer, const char *passphrase) -> HashMap<std::string, HashMap<std::string, std::string>> {
+        std::string encrypted, decrypted;
+
+        serializer >> encrypted;
+
+        try {
+            CryptoPP::StringSource ss2(encrypted, true,
+                new CryptoPP::HexDecoder(
+                    new Decryptor(
+                        passphrase,
+                        new CryptoPP::StringSink(decrypted)
+                    )
+                )
+            );
+        }
+        catch (const CryptoPP::DataDecryptorErr &e) {
+            throw Error("Invalid password");
+        }
+        catch (...) {
+            throw RuntimeError("Unexpected exception occurred");
+        }
+
+        return JSON::decode<HashMap<std::string, HashMap<std::string, std::string>>>(decrypted);
+    }
+};
+
 void PasswordStore::writeObject(OutputStreamSerializer &serializer) const {
     std::string encrypted;
 
@@ -46,36 +112,28 @@ void PasswordStore::writeObject(OutputStreamSerializer &serializer) const {
         )
     );
 
-    serializer << encrypted;
+    serializer << MAGIC << VERSION << encrypted;
 }
 
 void PasswordStore::readObject(InputStreamSerializer &serializer) {
-    std::string encrypted, decrypted;
+    uint64_t magic;
+    uint32_t version;
 
-    serializer >> encrypted;
-
-    try {
-        CryptoPP::StringSource ss2(encrypted, true,
-            new CryptoPP::HexDecoder(
-                new Decryptor(
-                    _passphrase.c_str(),
-                    new CryptoPP::StringSink(decrypted)
-                )
-            )
-        );
-    }
-    catch (const CryptoPP::DataDecryptorErr &e) {
-        throw Error("Invalid password");
-    }
-    catch (...) {
-        throw RuntimeError("Unexpected exception occurred");
+    if (! serializer.peek(&magic, sizeof(magic))) {
+        throw RuntimeError("An unexpected error occurred while attempting to read password file");
     }
 
-    _passwords = JSON::decode<HashMap<std::string, std::string>>(decrypted);
+    if (magic == MAGIC) {
+        serializer >> magic >> version;
+        _passwords = reader[version](serializer, _passphrase.c_str());
+    }
+    else {
+        _passwords = reader[0](serializer, _passphrase.c_str());
+    }
 }
 
 std::vector<std::string> PasswordStore::list() const {
-    auto l =  _passwords.map<List<std::string>>([] (const MapNode<std::string, std::string> &p) {
+    auto l =  _passwords.map<List<std::string>>([] (const MapNode<std::string, HashMap<std::string, std::string>> &p) {
         return p.k;
     });
 
